@@ -18,14 +18,68 @@ function e($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function result_head($title) {
+    echo '<h2>' . $title . '</h2>';
+}
+
 function message($title, $text) {
     echo '<div class="message"><p class="message-title">' . e($title) . '</p><p>' . e($text) . '</p></div>';
 }
 
 $country = isset($_GET['country']) ? trim($_GET['country']) : '';
+$lookup  = isset($_GET['lookup']) ? $_GET['lookup'] : 'country';
 
 // Escape % and _ so they are searched literally instead of acting as wildcards.
 $term = '%' . addcslashes($country, '%_\\') . '%';
+
+if ($lookup === 'cities') {
+    if ($country === '') {
+        message('Enter a country first', 'Type a country name, then choose Lookup Cities to see its cities.');
+        exit;
+    }
+
+    $stmt = $conn->prepare(
+        'SELECT c.name AS city, c.district, c.population, cs.name AS country
+         FROM cities c
+         JOIN countries cs ON c.country_code = cs.code
+         WHERE cs.name LIKE :country
+         ORDER BY c.population DESC'
+    );
+    $stmt->execute([':country' => $term]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (count($rows) === 0) {
+        message('No cities found', 'No country matches "' . $country . '".');
+        exit;
+    }
+
+    $matched = array_unique(array_column($rows, 'country'));
+    $label = count($matched) === 1 ? reset($matched) : $country;
+
+    result_head('Cities in ' . e($label));
+    ?>
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>District</th>
+                    <th class="num">Population</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($rows as $row): ?>
+                <tr>
+                    <td><?= e($row['city']) ?></td>
+                    <td><?= e($row['district']) ?></td>
+                    <td class="num strong"><?= number_format((int) $row['population']) ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php
+} else {
 
 $stmt = $conn->prepare(
     'SELECT name, continent, independence_year, head_of_state
@@ -42,7 +96,7 @@ if (count($rows) === 0) {
 }
 
 $title = $country === '' ? 'All countries' : 'Countries matching “' . e($country) . '”';
-echo '<h2>' . $title . '</h2>';
+result_head($title);
 ?>
 <div class="table-card">
     <table>
@@ -66,3 +120,5 @@ echo '<h2>' . $title . '</h2>';
         </tbody>
     </table>
 </div>
+<?php
+}
